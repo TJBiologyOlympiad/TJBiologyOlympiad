@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f6f3;
+  --foreground: #ffffff;
+  --sage: #99ad78;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sage: var(--sage);
+  --font-sans: var(--font-geist-sans);
+}
+
+html {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
