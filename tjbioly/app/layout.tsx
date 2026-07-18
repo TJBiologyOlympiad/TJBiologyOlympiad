@@ -15,7 +15,7 @@ const description =
 export const metadata: Metadata = {
   title: "TJ Biology Olympiad",
   description,
-  metadataBase: new URL("https://tjbiologyolympiad.org"),
+  metadataBase: new URL("https://tjbioly.vercel.app"),
   icons: {
     icon: "/logo.svg",
     apple: "/logo.svg",
@@ -23,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "TJ Biology Olympiad",
     description,
-    images: ["/logo.svg"],
+    images: ["/images/preview.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "TJ Biology Olympiad",
     description,
-    images: ["/logo.svg"],
+    images: ["/images/preview.png"],
   },
 };
 
