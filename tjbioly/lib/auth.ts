@@ -42,13 +42,11 @@ async function currentUser(): Promise<AppUser | null> {
   }
 }
 
-// officer = full admin access (+ role editing + officer profile features)
 export async function checkOfficerAccess(): Promise<boolean> {
   const user = await currentUser();
   return !!user && user.roles.includes("officer");
 }
 
-// staff = officer or sponsor (admin panel + attendance management)
 export async function checkStaffAccess(): Promise<boolean> {
   const user = await currentUser();
   return !!user && (user.roles.includes("officer") || user.roles.includes("sponsor"));

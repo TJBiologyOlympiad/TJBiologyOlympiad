@@ -33,9 +33,26 @@ export async function GET(request: Request) {
     User: { name: string | null; username: string | null } | null;
   };
 
+  function lastNameKey(name: string | null | undefined): string {
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return "";
+    const parts = trimmed.split(/\s+/);
+    return parts[parts.length - 1].toLowerCase();
+  }
+
+  const rows = (data as unknown as Row[]) || [];
+  rows.sort((a, b) => {
+    const an = lastNameKey(a.User?.name);
+    const bn = lastNameKey(b.User?.name);
+    if (an === "" && bn === "") return 0;
+    if (an === "") return 1;
+    if (bn === "") return -1;
+    return an.localeCompare(bn);
+  });
+
   const header = ["Name", "Username", "Block", "Date", "Code", "Marked At"];
   const lines = [header.join(",")];
-  for (const r of (data as unknown as Row[]) || []) {
+  for (const r of rows) {
     lines.push(
       [
         csvEscape(r.User?.name),

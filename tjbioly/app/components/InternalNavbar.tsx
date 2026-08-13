@@ -9,6 +9,7 @@ const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/resources", label: "Resources" },
   { href: "/schedule", label: "Schedule" },
+  { href: "/potw", label: "POTW" },
 ];
 
 export default function InternalNavbar() {
