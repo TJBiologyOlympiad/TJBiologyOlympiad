@@ -91,12 +91,18 @@ alter table "POTWWeek" enable row level security;
 alter table "POTWProblem" enable row level security;
 alter table "POTWAttempt" enable row level security;
 
+alter table if exists "CalendarEvent"
+  add column if not exists "until" date,
+  add column if not exists "excludedDates" date[] not null default '{}';
+
 create table if not exists "CalendarEvent" (
   "id" serial primary key,
   "title" text not null,
   "description" text,
   "date" date not null,
   "recurrence" text not null default 'none',
+  "until" date,
+  "excludedDates" date[] not null default '{}',
   "createdAt" timestamptz not null default now()
 );
 

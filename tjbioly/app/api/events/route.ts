@@ -12,10 +12,11 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("CalendarEvent")
-    .select("id, title, description, date, recurrence")
+    .select("id, title, description, date, recurrence, until, excludedDates")
     .order("date");
 
   if (error) {
+    console.error("Failed to fetch events:", error);
     return NextResponse.json({ error: "Failed to fetch events" }, { status: 500 });
   }
   return NextResponse.json({ events: data });
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
   try {
-    const { title, description, date, recurrence } = await request.json();
+    const { title, description, date, recurrence, until } = await request.json();
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
@@ -38,12 +39,19 @@ export async function POST(request: Request) {
     }
     const { data, error } = await supabase
       .from("CalendarEvent")
-      .insert({ title: title.trim(), description: description?.trim() || null, date, recurrence })
+      .insert({
+        title: title.trim(),
+        description: description?.trim() || null,
+        date,
+        recurrence,
+        until: recurrence !== "none" && until ? until : null,
+      })
       .select()
       .single();
     if (error) throw error;
     return NextResponse.json({ success: true, event: data });
-  } catch {
+  } catch (error) {
+    console.error("Failed to create event:", error);
     return NextResponse.json({ error: "Failed to create event" }, { status: 500 });
   }
 }

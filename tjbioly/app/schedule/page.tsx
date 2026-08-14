@@ -22,6 +22,8 @@ type EventType = {
   description: string | null;
   date: string;
   recurrence: string;
+  until: string | null;
+  excludedDates: string[];
 };
 
 function sameDay(a: Date, b: Date) {
@@ -40,6 +42,9 @@ function toDateInput(d: Date) {
 function occursOn(event: EventType, date: Date) {
   const start = parseDateOnly(event.date);
   if (date < start) return false;
+  if (event.until && date > parseDateOnly(event.until)) return false;
+  if (event.excludedDates?.includes(toDateInput(date))) return false;
+
   const diffDays = Math.round((date.getTime() - start.getTime()) / 86400000);
   switch (event.recurrence) {
     case "weekly":
@@ -74,7 +79,10 @@ export default function SchedulePage() {
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [recurrence, setRecurrence] = useState("none");
+  const [until, setUntil] = useState("");
   const [err, setErr] = useState("");
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!loading && !authenticated) router.push("/");
@@ -114,6 +122,7 @@ export default function SchedulePage() {
     setTitle("");
     setDescription("");
     setRecurrence("none");
+    setUntil("");
     setErr("");
   };
 
@@ -129,6 +138,7 @@ export default function SchedulePage() {
     setDescription(e.description ?? "");
     setDate(e.date);
     setRecurrence(e.recurrence);
+    setUntil(e.until ?? "");
     setErr("");
     setShowForm(true);
   };
@@ -143,7 +153,13 @@ export default function SchedulePage() {
     const res = await fetch(editingId ? `/api/events/${editingId}` : "/api/events", {
       method: editingId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: title.trim(), description: description.trim() || null, date, recurrence }),
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description.trim() || null,
+        date,
+        recurrence,
+        until: recurrence !== "none" && until ? until : null,
+      }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -154,9 +170,11 @@ export default function SchedulePage() {
     fetchEvents();
   };
 
-  const deleteEvent = async (id: number) => {
-    await fetch(`/api/events/${id}`, { method: "DELETE" });
+  const deleteEvent = async (id: number, occurrence?: string) => {
+    const url = occurrence ? `/api/events/${id}?occurrence=${occurrence}` : `/api/events/${id}`;
+    await fetch(url, { method: "DELETE" });
     if (editingId === id) resetForm();
+    setConfirmDeleteId(null);
     fetchEvents();
   };
 
@@ -241,21 +259,46 @@ export default function SchedulePage() {
 
               <div className="mt-3 divide-y divide-neutral-100">
                 {selectedEvents.map((e) => (
-                  <div key={e.id} className="flex items-start justify-between py-3 gap-3">
-                    <div>
-                      <p className="text-neutral-900">{e.title}</p>
-                      {e.description && <p className="text-sm text-neutral-500 mt-0.5">{e.description}</p>}
-                      {e.recurrence !== "none" && (
-                        <p className="text-xs text-neutral-400 mt-0.5">{recurrenceLabel(e.recurrence)}</p>
+                  <div key={e.id} className="py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-neutral-900">{e.title}</p>
+                        {e.description && <p className="text-sm text-neutral-500 mt-0.5">{e.description}</p>}
+                        {e.recurrence !== "none" && (
+                          <p className="text-xs text-neutral-400 mt-0.5">
+                            {recurrenceLabel(e.recurrence)}
+                            {e.until ? ` until ${e.until}` : ""}
+                          </p>
+                        )}
+                      </div>
+                      {isOfficer && (
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={() => openEditForm(e)} className="text-neutral-400 hover:text-sage" aria-label="Edit event">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              e.recurrence === "none" ? deleteEvent(e.id) : setConfirmDeleteId(confirmDeleteId === e.id ? null : e.id)
+                            }
+                            className="text-neutral-400 hover:text-red-500"
+                            aria-label="Delete event"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
-                    {isOfficer && (
-                      <div className="flex gap-2 shrink-0">
-                        <button onClick={() => openEditForm(e)} className="text-neutral-400 hover:text-sage" aria-label="Edit event">
-                          <Pencil className="w-3.5 h-3.5" />
+                    {confirmDeleteId === e.id && (
+                      <div className="mt-2 flex items-center gap-3 text-xs">
+                        <span className="text-neutral-500">Delete:</span>
+                        <button onClick={() => deleteEvent(e.id, toDateInput(selected))} className="text-red-500 hover:underline">
+                          This day only
                         </button>
-                        <button onClick={() => deleteEvent(e.id)} className="text-neutral-400 hover:text-red-500" aria-label="Delete event">
-                          <Trash2 className="w-3.5 h-3.5" />
+                        <button onClick={() => deleteEvent(e.id)} className="text-red-500 hover:underline">
+                          Entire series
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(null)} className="text-neutral-400 hover:text-neutral-700">
+                          Cancel
                         </button>
                       </div>
                     )}
@@ -280,24 +323,41 @@ export default function SchedulePage() {
                     placeholder="Details (optional)"
                     className="w-full border border-neutral-300 px-2 py-1.5 text-sm"
                   />
-                  <div className="flex flex-wrap gap-3">
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="border border-neutral-300 px-2 py-1.5 text-sm"
-                    />
-                    <select
-                      value={recurrence}
-                      onChange={(e) => setRecurrence(e.target.value)}
-                      className="border border-neutral-300 px-2 py-1.5 text-sm"
-                    >
-                      {RECURRENCES.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-wrap gap-3 items-end">
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1">Date</label>
+                      <input
+                        type="date"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        className="border border-neutral-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1">Repeats</label>
+                      <select
+                        value={recurrence}
+                        onChange={(e) => setRecurrence(e.target.value)}
+                        className="border border-neutral-300 px-2 py-1.5 text-sm"
+                      >
+                        {RECURRENCES.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {recurrence !== "none" && (
+                      <div>
+                        <label className="block text-xs text-neutral-500 mb-1">Ends (optional)</label>
+                        <input
+                          type="date"
+                          value={until}
+                          onChange={(e) => setUntil(e.target.value)}
+                          className="border border-neutral-300 px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <button type="submit" className="px-3 py-1.5 text-sm font-semibold bg-sage text-neutral-900">
