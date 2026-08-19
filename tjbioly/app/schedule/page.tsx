@@ -63,6 +63,8 @@ function occursOn(event: EventType, date: Date) {
 
 const recurrenceLabel = (r: string) => RECURRENCES.find((x) => x.value === r)?.label ?? "";
 
+const isBBlock = (date: Date) => date.getDay() === 5;
+
 export default function SchedulePage() {
   const { user, authenticated, loading } = useAuth();
   const router = useRouter();
@@ -214,15 +216,15 @@ export default function SchedulePage() {
 
           <div className="grid grid-cols-7">
             {cells.map((cellDate, i) => {
-              if (!cellDate) return <div key={i} className="h-20 border-t border-l border-neutral-100" />;
+              if (!cellDate) return <div key={i} className="h-24 border-t border-l border-neutral-100" />;
               const isToday = sameDay(cellDate, today);
               const isSelected = selected && sameDay(cellDate, selected);
-              const hasEvent = events.some((e) => occursOn(e, cellDate));
+              const dayEvents = events.filter((e) => occursOn(e, cellDate));
               return (
                 <button
                   key={i}
                   onClick={() => setSelected(cellDate)}
-                  className={`h-20 border-t border-l border-neutral-100 p-2 text-left align-top transition-colors ${
+                  className={`h-24 border-t border-l border-neutral-100 p-2 text-left align-top transition-colors overflow-hidden ${
                     isSelected ? "bg-sage/20" : "hover:bg-neutral-50"
                   }`}
                 >
@@ -233,7 +235,17 @@ export default function SchedulePage() {
                   >
                     {cellDate.getDate()}
                   </span>
-                  {hasEvent && <span className="block w-1 h-1 rounded-full bg-sage mt-1 ml-1" />}
+                  <div className="mt-1 space-y-0.5">
+                    {dayEvents.slice(0, 2).map((e) => (
+                      <p key={e.id} className="truncate text-[10px] leading-tight text-neutral-600">
+                        {e.title}
+                        {isBBlock(cellDate) && <span className="text-sage"> · B Block</span>}
+                      </p>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <p className="text-[10px] leading-tight text-neutral-400">+{dayEvents.length - 2} more</p>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -262,7 +274,10 @@ export default function SchedulePage() {
                   <div key={e.id} className="py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-neutral-900">{e.title}</p>
+                        <p className="text-neutral-900">
+                          {e.title}
+                          {isBBlock(selected) && <span className="ml-2 text-xs font-normal text-sage">B Block</span>}
+                        </p>
                         {e.description && <p className="text-sm text-neutral-500 mt-0.5">{e.description}</p>}
                         {e.recurrence !== "none" && (
                           <p className="text-xs text-neutral-400 mt-0.5">

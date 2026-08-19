@@ -79,17 +79,17 @@ export default function ProfilePage() {
 
         <div className="mt-8 space-y-6">
           <div>
-            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Name</h3>
+            <h3 className="text-xs font-bold text-neutral-400">Name</h3>
             <p className="text-lg text-neutral-900">{user.name || "—"}</p>
           </div>
           {user.username && (
             <div>
-              <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Username</h3>
+              <h3 className="text-xs font-bold text-neutral-400 ">Username</h3>
               <p className="text-neutral-800 font-mono">{user.username}</p>
             </div>
           )}
           <div>
-            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Roles</h3>
+            <h3 className="text-xs font-bold text-neutral-400 mb-1.5">Roles</h3>
             <div className="flex flex-wrap gap-2">
               {user.roles.map((r) => (
                 <span key={r} className="px-2.5 py-0.5 text-sm border border-neutral-300 text-neutral-700">
@@ -134,7 +134,7 @@ export default function ProfilePage() {
                 {position && (
                   <p className="text-sm font-medium text-neutral-600 mb-3">{position}</p>
                 )}
-                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-neutral-400 mb-1.5">
                   Description
                 </label>
                 <textarea
