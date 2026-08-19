@@ -15,7 +15,7 @@ const description =
 export const metadata: Metadata = {
   title: "TJ Biology Olympiad",
   description,
-  metadataBase: new URL("https://tjbioly.vercel.app"),
+  metadataBase: new URL("https://tjbo.org"),
   icons: {
     icon: "/logo.svg",
     apple: "/logo.svg",
