@@ -3,6 +3,9 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import NavbarManager from "./components/NavbarManager";
 import Footer from "./components/Footer";
+import { cookies } from "next/headers";
+import { AuthProvider } from "@/hooks/useAuth";
+import { NAV_SESSION_COOKIE, parseNavUser } from "@/lib/nav-session";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,16 +36,20 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const initialNavUser = cookieStore.has("ion_access_token") ? parseNavUser(cookieStore.get(NAV_SESSION_COOKIE)?.value) : null;
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body className="min-h-screen flex flex-col font-sans bg-[#f6f6f3] text-neutral-800">
-        <NavbarManager />
-        <main className="flex-grow">{children}</main>
+        <AuthProvider initialNavUser={initialNavUser}>
+          <NavbarManager />
+          <main className="flex-grow">{children}</main>
+        </AuthProvider>
         <Footer />
       </body>
     </html>

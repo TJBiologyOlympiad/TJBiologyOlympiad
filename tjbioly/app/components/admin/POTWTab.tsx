@@ -1,20 +1,17 @@
 "use client";
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { Eye, EyeOff, Trash2, Pencil, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
-import { POTWWeekAdmin, POTWProblemAdmin, POTWAttemptAdmin } from "./types";
+import { POTWWeekAdmin, POTWProblemAdmin } from "./types";
+import POTWReview from "./POTWReview";
 
 function emptyProblem(): POTWProblemAdmin {
   return { prompt: "", choices: ["", ""], correctIndex: 0 };
 }
 
+type Draft = { id: number; topic: string; description: string | null; problems: POTWProblemAdmin[]; updatedAt: string };
+
 function fmtDate(s: string) {
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function fmtAway(ms: number) {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
 export default function POTWTab() {
@@ -26,9 +23,15 @@ export default function POTWTab() {
   const [published, setPublished] = useState(false);
   const [problems, setProblems] = useState<POTWProblemAdmin[]>([emptyProblem()]);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [draftId, setDraftId] = useState<number | null>(null);
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [attempts, setAttempts] = useState<Record<number, POTWAttemptAdmin[]>>({});
+
+  useEffect(() => {
+    const saved = Number(sessionStorage.getItem("potw-review-week"));
+    if (Number.isInteger(saved) && saved > 0) queueMicrotask(() => setExpandedId(saved));
+  }, []);
 
   const fetchWeeks = useCallback(async () => {
     try {
@@ -40,11 +43,23 @@ export default function POTWTab() {
   }, []);
 
   useEffect(() => {
-    fetchWeeks();
+    queueMicrotask(() => { void fetchWeeks(); });
   }, [fetchWeeks]);
+
+  const fetchDrafts = useCallback(async () => {
+    const res = await fetch("/api/potw/admin/drafts");
+    if (res.ok) setDrafts((await res.json()).drafts);
+    else setErr((await res.json()).error);
+  }, []);
+  useEffect(() => {
+    fetch("/api/potw/admin/drafts").then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => { if (ok) setDrafts(data.drafts); else setErr(data.error); })
+      .catch(() => setErr("Failed to load drafts"));
+  }, []);
 
   const resetForm = () => {
     setEditingId(null);
+    setDraftId(null);
     setTopic("");
     setDescription("");
     setPublished(false);
@@ -52,15 +67,17 @@ export default function POTWTab() {
     setErr("");
   };
 
-  const loadForEdit = async (id: number) => {
+  const loadForEdit = useCallback(async (id: number) => {
     setErr("");
     const res = await fetch(`/api/potw/admin/weeks/${id}`);
     if (!res.ok) {
-      setErr("Failed to load week");
+      const data = await res.json().catch(() => ({}));
+      setErr(data.error || "Failed to load week");
       return;
     }
     const data = await res.json();
     setEditingId(id);
+    setDraftId(null);
     setTopic(data.week.topic);
     setDescription(data.week.description ?? "");
     setPublished(data.week.published);
@@ -73,7 +90,18 @@ export default function POTWTab() {
           }))
         : [emptyProblem()]
     );
-  };
+  }, []);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const weekId = Number(query.get("weekId"));
+    if (!Number.isInteger(weekId) || weekId <= 0) return;
+    if (query.get("mode") === "edit") queueMicrotask(() => { void loadForEdit(weekId); });
+    if (query.get("mode") === "review") {
+      sessionStorage.setItem("potw-review-week", String(weekId));
+      queueMicrotask(() => setExpandedId(weekId));
+    }
+  }, [loadForEdit]);
 
   const updateProblem = (i: number, updates: Partial<POTWProblemAdmin>) => {
     setProblems((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...updates } : p)));
@@ -102,6 +130,39 @@ export default function POTWTab() {
 
   const addProblem = () => setProblems((prev) => [...prev, emptyProblem()]);
   const removeProblem = (i: number) => setProblems((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+
+  const loadDraft = (id: number) => {
+    const draft = drafts.find(d => d.id === id);
+    if (!draft) return;
+    setEditingId(null);
+    setDraftId(id);
+    setTopic(draft.topic);
+    setDescription(draft.description || "");
+    setPublished(false);
+    setProblems(draft.problems.length ? draft.problems : [emptyProblem()]);
+    setErr("");
+  };
+
+  const saveDraft = async () => {
+    setErr("");
+    const res = await fetch("/api/potw/admin/drafts", {
+      method: draftId === null ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: draftId, topic, description, problems }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setErr(data.error); return; }
+    setDraftId(data.draft.id);
+    await fetchDrafts();
+  };
+
+  const deleteDraft = async () => {
+    if (draftId === null) return;
+    const res = await fetch(`/api/potw/admin/drafts?id=${draftId}`, { method: "DELETE" });
+    if (!res.ok) { setErr((await res.json()).error); return; }
+    resetForm();
+    await fetchDrafts();
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,6 +193,10 @@ export default function POTWTab() {
       setErr(data.error || "Failed to save week");
       return;
     }
+    if (draftId !== null) {
+      await fetch(`/api/potw/admin/drafts?id=${draftId}`, { method: "DELETE" });
+      await fetchDrafts();
+    }
     resetForm();
     fetchWeeks();
   };
@@ -152,24 +217,23 @@ export default function POTWTab() {
   };
 
   const toggleExpand = async (id: number) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(id);
-    if (!attempts[id]) {
-      const res = await fetch(`/api/potw/admin/weeks/${id}/attempts`);
-      if (res.ok) {
-        const data = await res.json();
-        setAttempts((prev) => ({ ...prev, [id]: data.attempts }));
-      }
-    }
+    const next = expandedId === id ? null : id;
+    setExpandedId(next);
+    if (next === null) sessionStorage.removeItem("potw-review-week");
+    else sessionStorage.setItem("potw-review-week", String(next));
   };
 
   return (
     <div className="space-y-6">
       <div className="border border-neutral-200 p-4">
         <h2 className="text-sm font-medium text-neutral-900 mb-3">{editingId ? "Edit Week" : "Create Week"}</h2>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label htmlFor="potw-drafts" className="text-sm text-neutral-600">Shared drafts</label>
+          <select id="potw-drafts" value={draftId ?? ""} onChange={e => e.target.value ? loadDraft(Number(e.target.value)) : resetForm()} className="border border-neutral-300 px-2 py-1.5 text-sm">
+            <option value="">New draft</option>
+            {drafts.map(d => <option key={d.id} value={d.id}>{d.topic || "Untitled draft"} · {new Date(d.updatedAt).toLocaleString()}</option>)}
+          </select>
+        </div>
         <form onSubmit={submit} className="space-y-4">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[200px]">
@@ -266,6 +330,8 @@ export default function POTWTab() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button type="button" onClick={saveDraft} className="px-3 py-1.5 text-sm border border-neutral-300">Save draft</button>
+            {draftId !== null && <button type="button" onClick={deleteDraft} className="text-sm text-red-600">Delete draft</button>}
             <button type="submit" className="px-3 py-1.5 text-sm font-semibold bg-sage text-neutral-900">
               {editingId ? "Save changes" : "Create"}
             </button>
@@ -290,7 +356,7 @@ export default function POTWTab() {
                 <th className="p-3 font-medium">Topic</th>
                 <th className="p-3 font-medium">Published</th>
                 <th className="p-3 font-medium">Problems</th>
-                <th className="p-3 font-medium">Attempts</th>
+                <th className="p-3 font-medium">Review</th>
                 <th className="p-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -314,7 +380,7 @@ export default function POTWTab() {
                         className="flex items-center gap-1 text-sm text-neutral-600 hover:text-sage"
                       >
                         {expandedId === w.id ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                        {w.attemptCount}
+                        Review activity ({w.attemptCount})
                       </button>
                     </td>
                     <td className="p-3">
@@ -337,36 +403,7 @@ export default function POTWTab() {
                   {expandedId === w.id && (
                     <tr className="border-b border-neutral-100 bg-neutral-50">
                       <td colSpan={5} className="p-3">
-                        {!attempts[w.id] ? (
-                          <p className="text-xs text-neutral-400">Loading…</p>
-                        ) : attempts[w.id].length === 0 ? (
-                          <p className="text-xs text-neutral-400">No attempts yet.</p>
-                        ) : (
-                          <table className="w-full text-left">
-                            <thead>
-                              <tr className="text-xs text-neutral-500">
-                                <th className="py-1 pr-3 font-medium">Name</th>
-                                <th className="py-1 pr-3 font-medium">Score</th>
-                                <th className="py-1 pr-3 font-medium">Violations</th>
-                                <th className="py-1 pr-3 font-medium">Away time</th>
-                                <th className="py-1 pr-3 font-medium">Submitted</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {attempts[w.id].map((a) => (
-                                <tr key={a.id} className="text-sm">
-                                  <td className="py-1 pr-3 text-neutral-900">{a.name || a.username}</td>
-                                  <td className="py-1 pr-3 text-neutral-600">
-                                    {a.score}/{a.totalProblems}
-                                  </td>
-                                  <td className="py-1 pr-3 text-neutral-600">{a.violationCount}</td>
-                                  <td className="py-1 pr-3 text-neutral-600">{fmtAway(a.awayMs)}</td>
-                                  <td className="py-1 pr-3 text-neutral-400">{fmtDate(a.submittedAt)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
+                        <POTWReview week={w} onCreatorChange={createdById => setWeeks(prev => prev.map(item => item.id === w.id ? { ...item, createdById } : item))} />
                       </td>
                     </tr>
                   )}

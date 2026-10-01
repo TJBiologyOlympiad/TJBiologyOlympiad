@@ -4,9 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 
 type AttemptRow = {
   userId: number;
+  weekId: number;
   score: number;
   totalProblems: number;
-  User: { name: string | null; username: string | null } | null;
+  User: { name: string | null; username: string | null; leaderboardBanned: boolean } | null;
 };
 
 export async function GET() {
@@ -17,11 +18,17 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("POTWAttempt")
-    .select("userId, score, totalProblems, User(name, username)");
+    .select("userId, weekId, score, totalProblems, User(name, username, leaderboardBanned)");
 
-  if (error) {
+  const { data: weeks, error: weeksError } = await supabase
+    .from("POTWWeek")
+    .select("createdById");
+
+  if (error || weeksError) {
     return NextResponse.json({ error: "Failed to fetch rankings" }, { status: 500 });
   }
+
+  const creators = new Set((weeks ?? []).map(w => w.createdById).filter((id): id is number => id !== null));
 
   const byUser = new Map<
     number,
@@ -29,6 +36,7 @@ export async function GET() {
   >();
 
   for (const a of data as unknown as AttemptRow[]) {
+    if (creators.has(a.userId) || a.User?.leaderboardBanned) continue;
     const existing = byUser.get(a.userId);
     if (existing) {
       existing.totalScore += a.score;

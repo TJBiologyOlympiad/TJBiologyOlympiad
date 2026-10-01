@@ -6,6 +6,7 @@ export type UserType = {
   username: string | null;
   classYear: string | null;
   roles: string[];
+  leaderboardBanned: boolean;
 };
 
 export type AttendanceBlockType = {
@@ -32,6 +33,7 @@ export type POTWWeekAdmin = {
   description: string | null;
   published: boolean;
   createdAt: string;
+  createdById: number | null;
   problemCount: number;
   attemptCount: number;
 };
@@ -45,5 +47,9 @@ export type POTWAttemptAdmin = {
   totalProblems: number;
   violationCount: number;
   awayMs: number;
+  durationMs: number;
+  copyCount: number;
+  pasteCount: number;
+  leaderboardBanned: boolean;
   submittedAt: string;
 };

@@ -27,20 +27,35 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const weekId = Number(id);
 
-  const { data: week, error: weekError } = await supabase
+  let { data: week, error: weekError } = await supabase
     .from("POTWWeek")
-    .select("id, topic, description, published, createdAt")
+    .select("id, topic, description, published, createdAt, createdById")
     .eq("id", weekId)
     .maybeSingle();
-  if (weekError || !week) {
+  if (weekError?.code === "42703") {
+    const legacy = await supabase.from("POTWWeek")
+      .select("id, topic, description, published, createdAt")
+      .eq("id", weekId).maybeSingle();
+    week = legacy.data ? { ...legacy.data, createdById: null } : null;
+    weekError = legacy.error;
+  }
+  if (weekError) {
+    console.error("POTW week edit lookup failed", weekError);
+    return NextResponse.json({ error: weekError.code === "42703" ? "Database schema update required; rerun supabase/schema.sql" : "Failed to load week" }, { status: 500 });
+  }
+  if (!week) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { data: problems } = await supabase
+  const { data: problems, error: problemsError } = await supabase
     .from("POTWProblem")
     .select("id, prompt, choices, correctIndex, orderIndex")
     .eq("weekId", weekId)
     .order("orderIndex");
+  if (problemsError) {
+    console.error("POTW problems edit lookup failed", problemsError);
+    return NextResponse.json({ error: "Failed to load problems" }, { status: 500 });
+  }
 
   return NextResponse.json({ week, problems: problems ?? [] });
 }
@@ -100,10 +115,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   try {
     const { id } = await params;
-    const { published } = await request.json();
+    const payload = await request.json();
+    const updates: { published?: boolean; createdById?: number | null } = {};
+    if (typeof payload.published === "boolean") updates.published = payload.published;
+    if ("createdById" in payload) {
+      if (payload.createdById !== null && (!Number.isInteger(payload.createdById) || payload.createdById <= 0)) {
+        return NextResponse.json({ error: "Invalid creator" }, { status: 400 });
+      }
+      updates.createdById = payload.createdById;
+    }
+    if (!Object.keys(updates).length) return NextResponse.json({ error: "No changes" }, { status: 400 });
     const { data, error } = await supabase
       .from("POTWWeek")
-      .update({ published: !!published })
+      .update(updates)
       .eq("id", Number(id))
       .select()
       .single();

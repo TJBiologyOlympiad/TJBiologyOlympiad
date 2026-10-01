@@ -9,11 +9,12 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("User")
-    .select("id, ionId, name, email, username, classYear, roles")
+    .select("id, ionId, name, email, username, classYear, roles, leaderboardBanned")
     .order("id");
 
   if (error) {
-    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+    console.error("Admin users lookup failed", error);
+    return NextResponse.json({ error: error.code === "42703" ? "Database schema update required; rerun supabase/schema.sql" : "Failed to fetch users" }, { status: 500 });
   }
   return NextResponse.json({ users: data });
 }

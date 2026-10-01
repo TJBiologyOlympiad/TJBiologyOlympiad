@@ -3,12 +3,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, Download, Trash2 } from "lucide-react";
+import Announcements from "@/app/components/Announcements";
 
 type AttendanceBlock = {
   id: number;
   blockType: string;
   date: string;
-  code: string;
   isClosed: boolean;
   submitted: boolean;
 };
@@ -74,13 +74,13 @@ export default function DashboardPage() {
       if (!authenticated || !user) {
         router.push("/");
       } else {
-        fetchBlocks();
+        queueMicrotask(() => { void fetchBlocks(); });
       }
     }
   }, [loading, authenticated, user, router, fetchBlocks]);
 
   useEffect(() => {
-    if (isStaff) fetchManaged();
+    if (isStaff) queueMicrotask(() => { void fetchManaged(); });
   }, [isStaff, fetchManaged]);
 
   const handleSubmit = async (blockId: number) => {
@@ -152,14 +152,17 @@ export default function DashboardPage() {
     return <div className="pt-28 text-center text-neutral-500">Loading…</div>;
   }
 
-  const openForMe = blocks.filter((b) => !b.submitted);
-  const submittedBlocks = blocks.filter((b) => b.submitted);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const currentBlocks = blocks.filter((b) => b.date >= today);
+  const openForMe = currentBlocks.filter((b) => !b.submitted);
+  const submittedBlocks = currentBlocks.filter((b) => b.submitted);
 
   return (
     <div className="min-h-screen pt-24 pb-24 px-4 sm:px-8 bg-white">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Dashboard</h1>
         <p className="mt-1 text-sm text-neutral-500">Roles: {user.roles.join(", ") || "user"}</p>
+        <div className="mt-8"><Announcements /></div>
 
         {/* Mark attendance */}
         <section className="mt-10 border border-neutral-200">

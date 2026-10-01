@@ -6,26 +6,37 @@ import UsersTab from "@/app/components/admin/UsersTab";
 import AttendanceTab from "@/app/components/admin/AttendanceTab";
 import ContestsTab from "@/app/components/admin/ContestsTab";
 import POTWTab from "@/app/components/admin/POTWTab";
+import AnnouncementsTab from "@/app/components/admin/AnnouncementsTab";
 import { UserType, AttendanceBlockType } from "@/app/components/admin/types";
 
-const TABS = ["users", "attendance", "contests", "potw"] as const;
+const TABS = ["users", "attendance", "contests", "potw", "announcements"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AdminPage() {
   const { user, authenticated, loading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<UserType[]>([]);
+  const [usersError, setUsersError] = useState("");
   const [blocks, setBlocks] = useState<AttendanceBlockType[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("users");
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    const saved = requested || sessionStorage.getItem("admin-tab");
+    if (saved && TABS.includes(saved as Tab)) queueMicrotask(() => setActiveTab(saved as Tab));
+  }, []);
+
   const isStaff = !!user && (user.roles.includes("officer") || user.roles.includes("sponsor"));
+  const isOfficer = !!user && user.roles.includes("officer");
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/users");
-      if (res.ok) setUsers((await res.json()).users);
+      const data = await res.json();
+      if (res.ok) { setUsers(data.users); setUsersError(""); }
+      else setUsersError(data.error || "Failed to load users");
     } catch {
-      /* ignore */
+      setUsersError("Failed to load users");
     }
   }, []);
 
@@ -43,8 +54,7 @@ export default function AdminPage() {
       if (!authenticated || !isStaff) {
         router.push("/");
       } else {
-        fetchUsers();
-        fetchBlocks();
+        queueMicrotask(() => { void fetchUsers(); void fetchBlocks(); });
       }
     }
   }, [loading, authenticated, isStaff, router, fetchUsers, fetchBlocks]);
@@ -93,11 +103,11 @@ export default function AdminPage() {
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Admin</h1>
 
-        <div className="flex gap-2 mt-8 mb-8">
-          {TABS.map((tab) => (
+        <div className="flex flex-wrap gap-2 mt-8 mb-8">
+          {TABS.filter(tab => tab !== "announcements" || isOfficer).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { setActiveTab(tab); sessionStorage.setItem("admin-tab", tab); }}
               className={`px-4 py-2 text-sm border capitalize ${
                 activeTab === tab
                   ? "border-sage bg-sage text-neutral-900 font-semibold"
@@ -109,7 +119,10 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {activeTab === "users" && <UsersTab users={users} onRoleToggle={handleRoleToggle} />}
+        {activeTab === "users" && <>
+          {usersError && <p className="mb-4 text-sm text-red-600">{usersError}</p>}
+          <UsersTab users={users} onRoleToggle={handleRoleToggle} />
+        </>}
         {activeTab === "attendance" && (
           <AttendanceTab
             blocks={blocks}
@@ -120,6 +133,7 @@ export default function AdminPage() {
         )}
         {activeTab === "contests" && <ContestsTab />}
         {activeTab === "potw" && <POTWTab />}
+        {activeTab === "announcements" && isOfficer && <AnnouncementsTab />}
       </div>
     </div>
   );

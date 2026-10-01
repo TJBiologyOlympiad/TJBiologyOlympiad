@@ -1,7 +1,12 @@
-import Link from "next/link";
 import HeroDoodles from "./components/HeroDoodles";
+import Announcements from "./components/Announcements";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { NAV_SESSION_COOKIE, parseNavUser } from "@/lib/nav-session";
 
-export default function Home() {
+export default async function Home() {
+  const cookieStore = await cookies();
+  if (cookieStore.has("ion_access_token") && parseNavUser(cookieStore.get(NAV_SESSION_COOKIE)?.value)) redirect("/dashboard");
   return (
     <div className="bg-[#f6f6f3] text-neutral-800">
       <section className="relative h-screen flex items-center justify-center overflow-hidden bg-[#f6f6f3]">
@@ -15,6 +20,7 @@ export default function Home() {
       </section>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-20 space-y-24">
+        <Announcements />
         <section id="about" className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
             <h2 className="text-xl font-semibold tracking-tight inline-block border-b-2 border-sage pb-1">About</h2>

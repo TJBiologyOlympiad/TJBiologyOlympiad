@@ -10,30 +10,16 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
-  const targetDate = date || new Date().toISOString().split("T")[0];
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const targetDate = date && date >= today ? date : today;
 
-  const isStaff = user.roles.includes("officer") || user.roles.includes("sponsor");
-
-  let blocks: Record<string, unknown>[] = [];
-
-  if (isStaff) {
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const { data } = await supabase
-      .from("AttendanceBlock")
-      .select("*")
-      .gte("date", weekAgo.toISOString().split("T")[0])
-      .order("date", { ascending: false });
-    blocks = data || [];
-  } else {
-    const { data } = await supabase
-      .from("AttendanceBlock")
-      .select("*")
-      .eq("date", targetDate)
-      .eq("isClosed", false)
-      .order("createdAt");
-    blocks = data || [];
-  }
+  const { data } = await supabase
+    .from("AttendanceBlock")
+    .select("id, blockType, date, isClosed, createdAt")
+    .eq("date", targetDate)
+    .eq("isClosed", false)
+    .order("createdAt");
+  const blocks = data || [];
 
   const { data: records } = await supabase
     .from("AttendanceRecord")

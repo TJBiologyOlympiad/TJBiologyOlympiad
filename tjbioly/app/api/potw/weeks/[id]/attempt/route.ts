@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const weekId = Number(id);
-    const { answers, violationCount, awayMs } = await request.json();
+    const { answers, violationCount, awayMs, durationMs, copyCount, pasteCount } = await request.json();
 
     const { data: week } = await supabase
       .from("POTWWeek")
@@ -70,6 +70,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         answers: gradedAnswers,
         violationCount: Number.isFinite(violationCount) ? Math.max(0, Math.trunc(violationCount)) : 0,
         awayMs: Number.isFinite(awayMs) ? Math.max(0, Math.trunc(awayMs)) : 0,
+        durationMs: Number.isFinite(durationMs) ? Math.max(0, Math.min(2147483647, Math.trunc(durationMs))) : 0,
+        copyCount: Number.isFinite(copyCount) ? Math.max(0, Math.min(2147483647, Math.trunc(copyCount))) : 0,
+        pasteCount: Number.isFinite(pasteCount) ? Math.max(0, Math.min(2147483647, Math.trunc(pasteCount))) : 0,
       })
       .select()
       .single();

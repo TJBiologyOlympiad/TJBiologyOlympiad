@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
-import { checkOfficerAccess } from "@/lib/auth";
+import { getCurrentUser, checkOfficerAccess } from "@/lib/auth";
 
 type WeekRow = {
   id: number;
@@ -8,6 +8,7 @@ type WeekRow = {
   description: string | null;
   published: boolean;
   createdAt: string;
+  createdById: number | null;
   POTWProblem?: { count: number }[];
   POTWAttempt?: { count: number }[];
 };
@@ -32,6 +33,7 @@ export async function GET() {
     description: w.description,
     published: w.published,
     createdAt: w.createdAt,
+    createdById: w.createdById ?? null,
     problemCount: w.POTWProblem?.[0]?.count ?? 0,
     attemptCount: w.POTWAttempt?.[0]?.count ?? 0,
   }));
@@ -58,7 +60,8 @@ function validateProblems(problems: unknown): problems is ProblemInput[] {
 }
 
 export async function POST(request: Request) {
-  if (!(await checkOfficerAccess())) {
+  const creator = await getCurrentUser();
+  if (!creator?.roles.includes("officer")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
   try {
@@ -75,10 +78,13 @@ export async function POST(request: Request) {
 
     const { data: week, error: weekError } = await supabase
       .from("POTWWeek")
-      .insert({ topic: topic.trim(), description: description || null, published: !!published })
+      .insert({ topic: topic.trim(), description: description || null, published: !!published, createdById: creator.id })
       .select()
       .single();
-    if (weekError) throw weekError;
+    if (weekError) {
+      console.error("POTW week insert failed", weekError);
+      return NextResponse.json({ error: weekError.code === "PGRST205" ? "POTW database tables have not been installed" : "Failed to create week" }, { status: 500 });
+    }
 
     const { data: insertedProblems, error: problemsError } = await supabase
       .from("POTWProblem")
@@ -92,10 +98,15 @@ export async function POST(request: Request) {
         }))
       )
       .select();
-    if (problemsError) throw problemsError;
+    if (problemsError) {
+      console.error("POTW problem insert failed", problemsError);
+      await supabase.from("POTWWeek").delete().eq("id", week.id);
+      return NextResponse.json({ error: problemsError.code === "PGRST205" ? "POTW database tables have not been installed" : "Failed to create week" }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, week, problems: insertedProblems });
-  } catch {
+  } catch (error) {
+    console.error("POTW week creation failed", error);
     return NextResponse.json({ error: "Failed to create week" }, { status: 500 });
   }
 }

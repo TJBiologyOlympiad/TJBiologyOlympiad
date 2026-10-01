@@ -3,7 +3,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ExternalLink, Pencil } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+
+type ResourceLink = { id: number; title: string; url: string };
 
 const FALLBACK_DRIVE_URL = "https://drive.google.com/drive/folders/1FBV6o4AaeDYvkBAX48-Duq5zFJYkbPiV?usp=sharing";
 
@@ -45,6 +47,11 @@ export default function ResourcesPage() {
   const [editing, setEditing] = useState(false);
   const [draftUrl, setDraftUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [links, setLinks] = useState<ResourceLink[]>([]);
+  const [linkId, setLinkId] = useState<number | null>(null);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
 
   const isOfficer = !!user && user.roles.includes("officer");
 
@@ -67,6 +74,38 @@ export default function ResourcesPage() {
   useEffect(() => {
     if (authenticated) fetchDriveUrl();
   }, [authenticated, fetchDriveUrl]);
+
+  const fetchLinks = useCallback(async () => {
+    const res = await fetch("/api/resource-links");
+    if (res.ok) setLinks((await res.json()).links);
+    else setLinkError((await res.json()).error);
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    fetch("/api/resource-links").then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => { if (ok) setLinks(data.links); else setLinkError(data.error); })
+      .catch(() => setLinkError("Failed to load links"));
+  }, [authenticated]);
+
+  const saveLink = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLinkError("");
+    const res = await fetch("/api/resource-links", {
+      method: linkId === null ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: linkId, title: linkTitle, url: linkUrl }),
+    });
+    if (!res.ok) { setLinkError((await res.json()).error); return; }
+    setLinkId(null); setLinkTitle(""); setLinkUrl("");
+    await fetchLinks();
+  };
+
+  const deleteLink = async (id: number) => {
+    const res = await fetch(`/api/resource-links?id=${id}`, { method: "DELETE" });
+    if (res.ok) await fetchLinks();
+    else setLinkError((await res.json()).error);
+  };
 
   const saveDriveUrl = async () => {
     if (!draftUrl.trim()) return;
@@ -139,6 +178,26 @@ export default function ResourcesPage() {
           USABO page
           <ExternalLink className="w-3.5 h-3.5" />
         </Link>
+
+        <section className="mt-12">
+          <h2 className="text-sm font-medium text-neutral-900 mb-2">Important links</h2>
+          <div className="divide-y divide-neutral-100 border-y border-neutral-100">
+            {links.map(link => <div key={link.id} className="flex items-center justify-between gap-3 py-3">
+              <a href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sage hover:underline">{link.title}<ExternalLink className="w-3.5 h-3.5" /></a>
+              {isOfficer && <span className="flex gap-3">
+                <button onClick={() => { setLinkId(link.id); setLinkTitle(link.title); setLinkUrl(link.url); }} aria-label={`Edit ${link.title}`} className="text-neutral-500 hover:text-sage"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => deleteLink(link.id)} aria-label={`Delete ${link.title}`} className="text-red-500"><Trash2 className="w-4 h-4" /></button>
+              </span>}
+            </div>)}
+          </div>
+          {isOfficer && <form onSubmit={saveLink} className="mt-4 flex flex-wrap gap-2">
+            <input required value={linkTitle} onChange={e => setLinkTitle(e.target.value)} placeholder="Link title" className="border border-neutral-300 px-3 py-2 text-sm" />
+            <input required type="url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://…" className="flex-1 min-w-52 border border-neutral-300 px-3 py-2 text-sm" />
+            <button className="bg-sage px-3 py-2 text-sm font-semibold">{linkId === null ? "Add link" : "Save link"}</button>
+            {linkId !== null && <button type="button" onClick={() => { setLinkId(null); setLinkTitle(""); setLinkUrl(""); }} className="text-sm">Cancel</button>}
+          </form>}
+          {linkError && <p className="mt-2 text-sm text-red-600">{linkError}</p>}
+        </section>
 
         <h2 className="text-sm font-medium text-neutral-900 mt-16 mb-4">Textbooks</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">

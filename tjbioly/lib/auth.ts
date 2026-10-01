@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/db";
+import { NAV_SESSION_COOKIE, parseNavUser } from "@/lib/nav-session";
 
 export type AppUser = {
   id: number;
@@ -33,6 +34,13 @@ async function lookupUser(token: string): Promise<AppUser | null> {
 
 async function currentUser(): Promise<AppUser | null> {
   const cookieStore = await cookies();
+  const session = parseNavUser(cookieStore.get(NAV_SESSION_COOKIE)?.value);
+  if (session) {
+    const { data, error } = await supabase.from("User")
+      .select("id, ionId, name, username, classYear, roles, pfpUrl, bio")
+      .eq("id", session.id).maybeSingle();
+    if (!error && data) return data as AppUser;
+  }
   const token = cookieStore.get("ion_access_token")?.value;
   if (!token) return null;
   try {
@@ -57,18 +65,6 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 }
 
 export async function getCurrentUserIonId(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("ion_access_token")?.value;
-  if (!token) return null;
-  try {
-    const profileRes = await fetch("https://ion.tjhsst.edu/api/profile", {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!profileRes.ok) return null;
-    const profileData = await profileRes.json();
-    return String(profileData.id);
-  } catch {
-    return null;
-  }
+  const user = await currentUser();
+  return user?.ionId ?? null;
 }

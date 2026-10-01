@@ -15,7 +15,7 @@ const navLinks = [
 const isRoute = (href: string) => !href.startsWith("/#");
 
 export default function Navbar() {
-  const { loading, authenticated } = useAuth();
+  const { authenticated } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -80,7 +80,7 @@ export default function Navbar() {
                 </a>
               )
             )}
-            {!loading && !authenticated && (
+            {!authenticated && (
               <Link
                 href="/api/auth/login"
                 className={`group inline-flex items-center gap-2 text-sm font-semibold transition-colors hover:text-sage ${
@@ -137,7 +137,7 @@ export default function Navbar() {
                 </a>
               )
             )}
-            {!loading && !authenticated ? (
+            {!authenticated ? (
               <Link
                 href="/api/auth/login"
                 className="block px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 rounded transition-colors"

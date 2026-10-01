@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { NAV_SESSION_COOKIE, createNavSession, navCookieOptions } from "@/lib/nav-session";
 
 const ion_client_id = process.env.ION_CLIENT_ID || process.env.NEXT_CLIENT_ID;
 const ion_client_secret = process.env.ION_CLIENT_SECRET || process.env.NEXT_CLIENT_SECRET;
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing code or OAuth config" }, { status: 400 });
   }
 
+  let stage = "token exchange";
   try {
     const tokenRes = await fetch("https://ion.tjhsst.edu/oauth/token/", {
       method: "POST",
@@ -47,10 +49,12 @@ export async function GET(request: Request) {
 
     const token = await tokenRes.json();
 
+    stage = "Ion profile";
     const profileRes = await fetch("https://ion.tjhsst.edu/api/profile", {
       headers: {
         Authorization: `Bearer ${token.access_token}`,
       },
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!profileRes.ok) {
@@ -58,6 +62,7 @@ export async function GET(request: Request) {
     }
 
     const profileData = await profileRes.json();
+    if (profileData.id == null) throw new Error("Ion profile has no id");
     const ionId = String(profileData.id);
     const email = profileData.tj_email || profileData.email || null;
     const name = profileData.full_name || profileData.first_name || null;
@@ -66,11 +71,13 @@ export async function GET(request: Request) {
 
     const isAutoOfficer = username === "2028efeldman";
 
-    const { data: existing } = await supabase
+    stage = "user lookup";
+    const { data: existing, error: lookupError } = await supabase
       .from('User')
       .select("id, roles")
       .eq("ionId", ionId)
       .maybeSingle();
+    if (lookupError) throw lookupError;
 
     let userId: number;
     let finalRoles: string[];
@@ -81,13 +88,16 @@ export async function GET(request: Request) {
         ? [...existing.roles, "officer"]
         : existing.roles;
 
-      await supabase
+      stage = "user update";
+      const { error: updateError } = await supabase
         .from('User')
         .update({ email, name, username, classYear, roles: finalRoles })
         .eq("id", userId);
+      if (updateError) throw updateError;
     } else {
       finalRoles = isAutoOfficer ? ["user", "officer"] : ["user"];
 
+      stage = "user creation";
       const { data: inserted, error: insertError } = await supabase
         .from('User')
         .insert({ ionId, email, name, username, classYear, roles: finalRoles })
@@ -99,6 +109,7 @@ export async function GET(request: Request) {
       userId = inserted.id;
     }
 
+    stage = "session cookie";
     const cookieStore = await cookies();
     cookieStore.set("ion_access_token", token.access_token as string, {
       httpOnly: true,
@@ -117,9 +128,11 @@ export async function GET(request: Request) {
       });
     }
 
+    cookieStore.set(NAV_SESSION_COOKIE, createNavSession({ id: userId, name, roles: finalRoles }), navCookieOptions());
+
     return NextResponse.redirect(new URL("/dashboard", request.url));
   } catch (error) {
-    console.error("Access Token Error", error, "cause:", error instanceof Error && 'cause' in error ? error.cause : "none");
-    return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
+    console.error(`OAuth callback failed during ${stage}`, error);
+    return NextResponse.json({ error: `Authentication failed during ${stage}` }, { status: 500 });
   }
 }

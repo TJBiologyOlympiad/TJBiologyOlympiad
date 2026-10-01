@@ -11,8 +11,11 @@ create table if not exists "User" (
   "name" text,
   "roles" text[] not null default '{user}',
   "pfpUrl" text,
-  "bio" text
+  "bio" text,
+  "leaderboardBanned" boolean not null default false
 );
+
+alter table "User" add column if not exists "leaderboardBanned" boolean not null default false;
 
 create table if not exists "AttendanceBlock" (
   "id" serial primary key,
@@ -41,6 +44,23 @@ create table if not exists "Notification" (
   "createdAt" timestamptz not null default now()
 );
 
+create table if not exists "Announcement" (
+  "id" serial primary key,
+  "title" text not null,
+  "body" text not null,
+  "startsAt" timestamptz not null,
+  "endsAt" timestamptz not null,
+  "createdAt" timestamptz not null default now(),
+  constraint "Announcement_valid_window" check ("endsAt" > "startsAt")
+);
+
+create table if not exists "ResourceLink" (
+  "id" serial primary key,
+  "title" text not null,
+  "url" text not null,
+  "createdAt" timestamptz not null default now()
+);
+
 -- ── App settings (key/value) ──
 create table if not exists "AppSetting" (
   "key" text primary key,
@@ -53,7 +73,23 @@ create table if not exists "POTWWeek" (
   "topic" text not null,
   "description" text,
   "published" boolean not null default false,
-  "createdAt" timestamptz not null default now()
+  "createdAt" timestamptz not null default now(),
+  "createdById" integer references "User"("id") on delete set null
+);
+
+alter table "POTWWeek" add column if not exists "createdById" integer references "User"("id") on delete set null;
+
+update "POTWWeek"
+set "createdById" = (select "id" from "User" where "username" = '2028efeldman' limit 1)
+where "topic" = 'Biochem: Week 1' and "createdById" is null
+  and exists (select 1 from "User" where "username" = '2028efeldman');
+
+create table if not exists "POTWDraft" (
+  "id" serial primary key,
+  "topic" text not null default '',
+  "description" text,
+  "problems" jsonb not null default '[]',
+  "updatedAt" timestamptz not null default now()
 );
 
 create table if not exists "POTWProblem" (
@@ -74,9 +110,16 @@ create table if not exists "POTWAttempt" (
   "answers" jsonb not null,
   "violationCount" integer not null default 0,
   "awayMs" integer not null default 0,
+  "durationMs" integer not null default 0,
+  "copyCount" integer not null default 0,
+  "pasteCount" integer not null default 0,
   "submittedAt" timestamptz not null default now(),
   unique ("weekId", "userId")
 );
+
+alter table "POTWAttempt" add column if not exists "durationMs" integer not null default 0;
+alter table "POTWAttempt" add column if not exists "copyCount" integer not null default 0;
+alter table "POTWAttempt" add column if not exists "pasteCount" integer not null default 0;
 
 insert into "AppSetting" ("key", "value")
 values ('resourcesDriveUrl', 'https://drive.google.com/drive/folders/1FBV6o4AaeDYvkBAX48-Duq5zFJYkbPiV?usp=sharing')
@@ -86,8 +129,11 @@ alter table "User" enable row level security;
 alter table "AttendanceBlock" enable row level security;
 alter table "AttendanceRecord" enable row level security;
 alter table "Notification" enable row level security;
+alter table "Announcement" enable row level security;
+alter table "ResourceLink" enable row level security;
 alter table "AppSetting" enable row level security;
 alter table "POTWWeek" enable row level security;
+alter table "POTWDraft" enable row level security;
 alter table "POTWProblem" enable row level security;
 alter table "POTWAttempt" enable row level security;
 

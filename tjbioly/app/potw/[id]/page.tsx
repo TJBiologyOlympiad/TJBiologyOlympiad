@@ -1,14 +1,15 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback, useRef, use } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { PotwWeekDetail, PotwProblem, PotwAnswer } from "../types";
 
 export default function POTWWeekPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { authenticated, loading } = useAuth();
+  const { user, authenticated, loading } = useAuth();
+  const userId = user?.id;
   const router = useRouter();
 
   const [detail, setDetail] = useState<PotwWeekDetail | null>(null);
@@ -21,38 +22,76 @@ export default function POTWWeekPage({ params }: { params: Promise<{ id: string 
   const violationCountRef = useRef(0);
   const awayMsRef = useRef(0);
   const awayStartRef = useRef<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const copyCountRef = useRef(0);
+  const pasteCountRef = useRef(0);
 
   useEffect(() => {
     if (!loading && !authenticated) router.push("/");
   }, [loading, authenticated, router]);
 
-  const fetchWeek = useCallback(async () => {
-    const res = await fetch(`/api/potw/weeks/${id}`);
-    if (res.ok) setDetail(await res.json());
-  }, [id]);
-
   useEffect(() => {
-    if (authenticated) fetchWeek();
-  }, [authenticated, fetchWeek]);
+    if (!authenticated || !userId) return;
+    const key = `potw-week:${userId}:${id}`;
+    try {
+      const cached = sessionStorage.getItem(key);
+      if (cached) queueMicrotask(() => setDetail(JSON.parse(cached)));
+    } catch { /* ignore invalid cache */ }
+    fetch(`/api/potw/weeks/${id}`).then(async res => {
+      const data = await res.json();
+      if (res.ok) {
+        setDetail(data);
+        sessionStorage.setItem(key, JSON.stringify(data));
+      }
+      else setErr(data.error || "Failed to load week");
+    }).catch(() => setErr("Failed to load week"));
+  }, [authenticated, userId, id]);
 
   useEffect(() => {
     if (!detail || detail.attempted) return;
+    const telemetryKey = `potw-telemetry:${userId}:${id}`;
+    if (startedAtRef.current === null) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(telemetryKey) || "null");
+        startedAtRef.current = Number.isFinite(saved?.startedAt) ? saved.startedAt : Date.now();
+        violationCountRef.current = Number.isFinite(saved?.switches) ? saved.switches : 0;
+        awayMsRef.current = Number.isFinite(saved?.awayMs) ? saved.awayMs : 0;
+        copyCountRef.current = Number.isFinite(saved?.copyCount) ? saved.copyCount : 0;
+        pasteCountRef.current = Number.isFinite(saved?.pasteCount) ? saved.pasteCount : 0;
+      } catch { startedAtRef.current = Date.now(); }
+    }
+    const persist = () => sessionStorage.setItem(telemetryKey, JSON.stringify({
+      startedAt: startedAtRef.current, switches: violationCountRef.current,
+      awayMs: awayMsRef.current, copyCount: copyCountRef.current, pasteCount: pasteCountRef.current,
+    }));
+    persist();
 
     const onVisibilityChange = () => {
       if (document.hidden) {
         if (awayStartRef.current === null) {
           awayStartRef.current = Date.now();
           violationCountRef.current += 1;
+          persist();
         }
       } else if (awayStartRef.current !== null) {
         awayMsRef.current += Date.now() - awayStartRef.current;
         awayStartRef.current = null;
+        persist();
       }
     };
 
+    const onCopy = () => { copyCountRef.current += 1; persist(); };
+    const onPaste = () => { pasteCountRef.current += 1; persist(); };
+
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [detail]);
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [detail, userId, id]);
 
   const submit = async () => {
     if (!detail) return;
@@ -73,6 +112,9 @@ export default function POTWWeekPage({ params }: { params: Promise<{ id: string 
           })),
           violationCount: violationCountRef.current,
           awayMs: awayMsRef.current,
+          durationMs: startedAtRef.current === null ? 0 : Date.now() - startedAtRef.current,
+          copyCount: copyCountRef.current,
+          pasteCount: pasteCountRef.current,
         }),
       });
       const data = await res.json();
@@ -80,21 +122,21 @@ export default function POTWWeekPage({ params }: { params: Promise<{ id: string 
         setErr(data.error || "Failed to submit");
         return;
       }
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              attempted: true,
-              attempt: { score: data.score, totalProblems: data.totalProblems, answers: data.answers, submittedAt: data.submittedAt },
-              problems: data.problems,
-            }
-          : prev
-      );
+      const updated = {
+        ...detail,
+        attempted: true,
+        attempt: { score: data.score, totalProblems: data.totalProblems, answers: data.answers, submittedAt: data.submittedAt },
+        problems: data.problems,
+      };
+      setDetail(updated);
+      if (user) sessionStorage.setItem(`potw-week:${user.id}:${id}`, JSON.stringify(updated));
+      sessionStorage.removeItem(`potw-telemetry:${userId}:${id}`);
     } finally {
       setSubmitting(false);
     }
   };
 
+  if (!detail && err && !loading) return <div className="pt-28 text-center text-red-600">{err}</div>;
   if (loading || !authenticated || !detail) {
     return <div className="pt-28 text-center text-neutral-500">Loading…</div>;
   }
@@ -156,8 +198,9 @@ export default function POTWWeekPage({ params }: { params: Promise<{ id: string 
                         key={cIdx}
                         type="button"
                         onClick={() => setSelected((prev) => ({ ...prev, [p.id]: cIdx }))}
-                        className={`block w-full text-left py-1.5 px-2 border transition-colors ${
-                          isSelected ? "border-sage text-neutral-900" : "border-transparent text-neutral-600 hover:border-neutral-200"
+                        aria-pressed={isSelected}
+                        className={`block w-full text-left py-2.5 px-3 border rounded-sm transition-colors ${
+                          isSelected ? "border-sage bg-[#edf3e8] text-neutral-900" : "border-neutral-300 text-neutral-700 hover:border-sage hover:bg-neutral-50"
                         }`}
                       >
                         {choice}

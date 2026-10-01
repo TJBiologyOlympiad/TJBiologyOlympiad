@@ -24,6 +24,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Block not found" }, { status: 404 });
     }
 
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    if (block.date < today) {
+      return NextResponse.json({ error: "This attendance date has passed" }, { status: 400 });
+    }
+
     const isStaff = user.roles.includes("officer") || user.roles.includes("sponsor");
     if (block.isClosed && !isStaff) {
       return NextResponse.json({ error: "Block is closed" }, { status: 400 });
