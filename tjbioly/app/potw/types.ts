@@ -13,6 +13,7 @@ export type PotwProblem = {
   id: number;
   prompt: string;
   choices: string[];
+  imageUrl?: string | null;
   orderIndex: number;
   correctIndex?: number;
 };

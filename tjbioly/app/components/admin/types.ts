@@ -24,6 +24,7 @@ export type POTWProblemAdmin = {
   prompt: string;
   choices: string[];
   correctIndex: number;
+  imageUrl?: string | null;
   orderIndex?: number;
 };
 

@@ -117,6 +117,8 @@ create table if not exists "POTWAttempt" (
   unique ("weekId", "userId")
 );
 
+alter table "POTWProblem" add column if not exists "imageUrl" text;
+
 alter table "POTWAttempt" add column if not exists "durationMs" integer not null default 0;
 alter table "POTWAttempt" add column if not exists "copyCount" integer not null default 0;
 alter table "POTWAttempt" add column if not exists "pasteCount" integer not null default 0;

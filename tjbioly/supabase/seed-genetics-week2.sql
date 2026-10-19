@@ -1,0 +1,20 @@
+-- Run after schema.sql. Safe to rerun: an existing Genetics: Week 2 is left intact.
+with created_week as (
+  insert into "POTWWeek" ("topic", "description", "published", "createdById")
+  select 'Genetics: Week 2', 'Genetics practice questions', true,
+    (select "id" from "User" where "username" = '2028efeldman' limit 1)
+  where not exists (select 1 from "POTWWeek" where "topic" = 'Genetics: Week 2')
+  returning "id"
+)
+insert into "POTWProblem" ("weekId", "prompt", "choices", "correctIndex", "imageUrl", "orderIndex")
+select created_week."id", questions.prompt, questions.choices::jsonb, questions.correct_index, questions.image_url, questions.order_index
+from created_week
+cross join (values
+  (0, 'Which of the following is NOT a necessary condition for Hardy-Weinberg equilibrium?', '["Phenotypic frequencies remain constant throughout generations", "Random mating", "No flow of genes into the population", "No natural selection of genes", "Large population size"]', 0, null),
+  (1, 'In the bacterial pathway for the biosynthesis of arginine, proline is converted into ornithine, which is converted into citrulline, which is finally converted into arginine. A certain class of mutants can grow on citrulline. A certain mutant X cannot convert ornithine into citrulline; another mutant Y cannot convert citrulline into arginine; finally, a mutant Z cannot convert proline into ornithine. Given the information above, which of the following is NOT true?', '["A merodiploid (fusion of two bacteria) between mutant X and Z would be able to grow on media containing ornithine", "A colony of mutant X bacteria could grow in the presence of citrulline", "A colony of mutant Z bacteria would show some growth in a media without proline but with vitamin C", "A colony of mutant X bacteria adjacent to a colony of mutant Y bacteria would show some growth in excess ornithine", "A mutant Z may grow in proline if it''s transformed with a plasmid containing the enzyme it lacks"]', 2, null),
+  (2, 'An autosomal recessive disease has an incidence of 1 in 2,500 live births. Assuming Hardy-Weinberg equilibrium, what is the approximate carrier frequency?', '["1 in 25", "1 in 50", "1 in 100", "1 in 250", "1 in 500"]', 0, null),
+  (3, 'In the pathway to create blue pigment in a certain plant, a white precursor is first converted by one enzyme into a yellow intermediate, which is then acted upon by another enzyme to form the blue pigment. After crossing a population of yellow flowers with a population of white flowers, all F1 offspring are blue. Backcrossing the F1 generation with each of the parental strains produces the following results. Assuming 1 copy of each chromosome in these plants is required for survival, and based on the information provided, which of the following statements is NOT true?', '["Each parent is homozygous dominant for 1 gene and homozygous recessive for another", "The 3 white offspring from the F1 x Yellow parent may have resulted from a nondisjunction", "The yellow parent is missing a functional copy of the second enzyme in the pathway", "If the F1 generation was self-crossed, it would produce a 9:3:4 ratio", "Ignoring mutations, if the blue offspring from both crosses were crossed with one another, some white offspring would be produced"]', 1, '/images/potw/genetics-week2-q4.png'),
+  (4, 'Two carrier parents (Aa x Aa) have 5 children. At least 2 of them have the recessive disease. What''s the probability that exactly 2 do?', '["135/512", "270/781", "135/188", "5/16"]', 2, null),
+  (5, 'At one gene, 4 alleles are equally common. Two full siblings are picked at random. What''s the probability they have the same genotype?', '["7/64", "103/256", "1/4", "3/8"]', 1, null),
+  (6, 'A dominant disease shows up in only 80% of people who carry the allele. Carol''s dad is a carrier, and her mom isn''t. Carol looks healthy, and so do her 2 kids (their dad isn''t a carrier). What''s the chance her next kid gets the disease?', '["1/5", "1/15", "9/134", "9/335"]', 3, null)
+) as questions(order_index, prompt, choices, correct_index, image_url);

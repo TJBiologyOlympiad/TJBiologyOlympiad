@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Eye, EyeOff, Trash2, Pencil, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Trash2, Pencil, ChevronDown, ChevronRight, Plus, X, ImagePlus } from "lucide-react";
 import { POTWWeekAdmin, POTWProblemAdmin } from "./types";
 import POTWReview from "./POTWReview";
 
@@ -87,6 +87,7 @@ export default function POTWTab() {
             prompt: p.prompt,
             choices: p.choices,
             correctIndex: p.correctIndex,
+            imageUrl: p.imageUrl ?? null,
           }))
         : [emptyProblem()]
     );
@@ -126,6 +127,16 @@ export default function POTWTab() {
         return { ...p, choices, correctIndex };
       })
     );
+  };
+
+  const uploadImage = async (pIdx: number, file: File) => {
+    setErr("");
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/potw/admin/upload", { method: "POST", body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setErr(data.error || "Image upload failed"); return; }
+    updateProblem(pIdx, { imageUrl: data.url });
   };
 
   const addProblem = () => setProblems((prev) => [...prev, emptyProblem()]);
@@ -266,10 +277,10 @@ export default function POTWTab() {
             {problems.map((p, pIdx) => (
               <div key={pIdx} className="border border-neutral-200 p-3 space-y-2">
                 <div className="flex items-start gap-2">
-                  <input
-                    type="text"
+                  <textarea
                     value={p.prompt}
                     onChange={(e) => updateProblem(pIdx, { prompt: e.target.value })}
+                    rows={2}
                     placeholder={`Problem ${pIdx + 1} prompt`}
                     className="flex-1 border border-neutral-300 px-2 py-1.5 text-sm"
                   />
@@ -282,6 +293,34 @@ export default function POTWTab() {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
+                {p.imageUrl ? (
+                  <div className="flex items-start gap-2 pl-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.imageUrl} alt="" className="max-h-40 border border-neutral-200" />
+                    <button
+                      type="button"
+                      onClick={() => updateProblem(pIdx, { imageUrl: null })}
+                      className="p-1 text-neutral-400 hover:text-red-500"
+                      aria-label="Remove image"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-1 pl-2 text-xs text-neutral-500 hover:text-sage cursor-pointer w-fit">
+                    <ImagePlus className="w-3 h-3" /> Add image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void uploadImage(pIdx, file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
                 <div className="space-y-1.5 pl-2">
                   {p.choices.map((c, cIdx) => (
                     <div key={cIdx} className="flex items-center gap-2">

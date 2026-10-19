@@ -41,7 +41,7 @@ export async function GET() {
   return NextResponse.json({ weeks });
 }
 
-type ProblemInput = { prompt: string; choices: string[]; correctIndex: number };
+type ProblemInput = { prompt: string; choices: string[]; correctIndex: number; imageUrl?: string | null };
 
 function validateProblems(problems: unknown): problems is ProblemInput[] {
   if (!Array.isArray(problems) || problems.length === 0) return false;
@@ -55,7 +55,8 @@ function validateProblems(problems: unknown): problems is ProblemInput[] {
       p.choices.every((c: unknown) => typeof c === "string" && c.trim().length > 0) &&
       Number.isInteger(p.correctIndex) &&
       p.correctIndex >= 0 &&
-      p.correctIndex < p.choices.length
+      p.correctIndex < p.choices.length &&
+      (p.imageUrl == null || typeof p.imageUrl === "string")
   );
 }
 
@@ -94,6 +95,7 @@ export async function POST(request: Request) {
           prompt: p.prompt.trim(),
           choices: p.choices.map((c) => c.trim()),
           correctIndex: p.correctIndex,
+          imageUrl: p.imageUrl || null,
           orderIndex: i,
         }))
       )

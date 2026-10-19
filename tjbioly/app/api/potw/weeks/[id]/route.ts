@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (attempt) {
     const { data: problems } = await supabase
       .from("POTWProblem")
-      .select("id, prompt, choices, correctIndex, orderIndex")
+      .select("id, prompt, choices, correctIndex, imageUrl, orderIndex")
       .eq("weekId", weekId)
       .order("orderIndex");
 
@@ -46,7 +46,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: problems } = await supabase
     .from("POTWProblem")
-    .select("id, prompt, choices, orderIndex")
+    .select("id, prompt, choices, imageUrl, orderIndex")
     .eq("weekId", weekId)
     .order("orderIndex");
 

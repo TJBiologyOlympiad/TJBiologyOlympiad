@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { checkOfficerAccess } from "@/lib/auth";
 
-type ProblemInput = { prompt: string; choices: string[]; correctIndex: number };
+type ProblemInput = { prompt: string; choices: string[]; correctIndex: number; imageUrl?: string | null };
 
 function validateProblems(problems: unknown): problems is ProblemInput[] {
   if (!Array.isArray(problems) || problems.length === 0) return false;
@@ -16,7 +16,8 @@ function validateProblems(problems: unknown): problems is ProblemInput[] {
       p.choices.every((c: unknown) => typeof c === "string" && c.trim().length > 0) &&
       Number.isInteger(p.correctIndex) &&
       p.correctIndex >= 0 &&
-      p.correctIndex < p.choices.length
+      p.correctIndex < p.choices.length &&
+      (p.imageUrl == null || typeof p.imageUrl === "string")
   );
 }
 
@@ -49,7 +50,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: problems, error: problemsError } = await supabase
     .from("POTWProblem")
-    .select("id, prompt, choices, correctIndex, orderIndex")
+    .select("id, prompt, choices, correctIndex, imageUrl, orderIndex")
     .eq("weekId", weekId)
     .order("orderIndex");
   if (problemsError) {
@@ -97,6 +98,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           prompt: p.prompt.trim(),
           choices: p.choices.map((c) => c.trim()),
           correctIndex: p.correctIndex,
+          imageUrl: p.imageUrl || null,
           orderIndex: i,
         }))
       )

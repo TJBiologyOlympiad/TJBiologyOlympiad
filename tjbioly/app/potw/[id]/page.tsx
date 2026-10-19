@@ -166,9 +166,13 @@ export default function POTWWeekPage({ params }: { params: Promise<{ id: string 
             const graded = attempted ? answerByProblem.get(p.id) : undefined;
             return (
               <div key={p.id}>
-                <p className="text-neutral-900">
+                <p className="text-neutral-900 whitespace-pre-line">
                   {i + 1}. {p.prompt}
                 </p>
+                {p.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.imageUrl} alt={`Figure for problem ${i + 1}`} className="mt-3 max-w-full border border-neutral-200" />
+                )}
                 <div className="mt-3 space-y-1.5">
                   {p.choices.map((choice, cIdx) => {
                     if (attempted) {

@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Grade server-side — never trust client-submitted correctness.
     const { data: problems, error: problemsError } = await supabase
       .from("POTWProblem")
-      .select("id, prompt, choices, correctIndex, orderIndex")
+      .select("id, prompt, choices, correctIndex, imageUrl, orderIndex")
       .eq("weekId", weekId)
       .order("orderIndex");
     if (problemsError || !problems || problems.length === 0) {
