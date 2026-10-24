@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { Download, Trash2 } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ChevronDown, ChevronRight, Download, Trash2 } from "lucide-react";
 import { AttendanceBlockType } from "./types";
 
 const BLOCK_TYPES = ["8A", "8B"];
@@ -13,6 +13,12 @@ function fmtDate(s: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+type AttendeeRecord = { name: string | null; username: string | null; timestamp: string };
+
+function fmtTime(s: string) {
+  return new Date(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 export default function AttendanceTab({
@@ -30,6 +36,24 @@ export default function AttendanceTab({
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [code, setCode] = useState("");
   const [err, setErr] = useState("");
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [attendees, setAttendees] = useState<Record<number, AttendeeRecord[] | "error">>({});
+
+  const toggle = async (id: number) => {
+    if (expanded === id) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(id);
+    try {
+      const res = await fetch(`/api/attendance/export?blockId=${id}&format=json`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setAttendees((prev) => ({ ...prev, [id]: data.records }));
+    } catch {
+      setAttendees((prev) => ({ ...prev, [id]: "error" }));
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +125,7 @@ export default function AttendanceTab({
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-neutral-200 text-xs text-neutral-500">
+                <th className="p-3 w-8" />
                 <th className="p-3 font-medium">Type</th>
                 <th className="p-3 font-medium">Date</th>
                 <th className="p-3 font-medium">Code</th>
@@ -110,32 +135,75 @@ export default function AttendanceTab({
             </thead>
             <tbody>
               {blocks.map((b) => (
-                <tr key={b.id} className="border-b border-neutral-100">
-                  <td className="p-3 text-sm text-neutral-900">{b.blockType}</td>
-                  <td className="p-3 text-sm text-neutral-500">{fmtDate(b.date)}</td>
-                  <td className="p-3 text-sm font-mono text-neutral-600">{b.code}</td>
-                  <td className="p-3 text-sm">{b._count?.records || 0}</td>
-                  <td className="p-3">
-                    <div className="flex gap-2">
+                <Fragment key={b.id}>
+                  <tr className="border-b border-neutral-100">
+                    <td className="p-3">
                       <button
-                        onClick={() => onExportCSV(b.id)}
-                        className="flex items-center gap-1 px-2 py-1 text-xs border border-neutral-300 text-neutral-600 hover:border-sage"
+                        onClick={() => toggle(b.id)}
+                        aria-label={expanded === b.id ? "Hide attendees" : "Show attendees"}
+                        className="text-neutral-500 hover:text-neutral-900"
                       >
-                        <Download className="w-3 h-3" /> CSV
+                        {expanded === b.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </button>
-                      <button
-                        onClick={() => onDeleteBlock(b.id)}
-                        className="flex items-center gap-1 px-2 py-1 text-xs border border-neutral-300 text-red-500 hover:border-red-400"
-                      >
-                        <Trash2 className="w-3 h-3" /> Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="p-3 text-sm text-neutral-900">{b.blockType}</td>
+                    <td className="p-3 text-sm text-neutral-500">{fmtDate(b.date)}</td>
+                    <td className="p-3 text-sm font-mono text-neutral-600">{b.code}</td>
+                    <td className="p-3 text-sm">{b._count?.records || 0}</td>
+                    <td className="p-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onExportCSV(b.id)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs border border-neutral-300 text-neutral-600 hover:border-sage"
+                        >
+                          <Download className="w-3 h-3" /> CSV
+                        </button>
+                        <button
+                          onClick={() => onDeleteBlock(b.id)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs border border-neutral-300 text-red-500 hover:border-red-400"
+                        >
+                          <Trash2 className="w-3 h-3" /> Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded === b.id && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={6} className="p-3">
+                        {attendees[b.id] === undefined ? (
+                          <p className="text-sm text-neutral-400">Loading…</p>
+                        ) : attendees[b.id] === "error" ? (
+                          <p className="text-sm text-red-500">Failed to load attendees.</p>
+                        ) : (attendees[b.id] as AttendeeRecord[]).length === 0 ? (
+                          <p className="text-sm text-neutral-400">No one has marked attendance yet.</p>
+                        ) : (
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="text-xs text-neutral-500">
+                                <th className="py-1 pr-3 font-medium">Name</th>
+                                <th className="py-1 pr-3 font-medium">Username</th>
+                                <th className="py-1 font-medium">Marked At</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(attendees[b.id] as AttendeeRecord[]).map((r, i) => (
+                                <tr key={i} className="border-t border-neutral-200">
+                                  <td className="py-1 pr-3 text-sm text-neutral-900">{r.name || "—"}</td>
+                                  <td className="py-1 pr-3 text-sm font-mono text-neutral-600">{r.username || "—"}</td>
+                                  <td className="py-1 text-sm text-neutral-500">{fmtTime(r.timestamp)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {blocks.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-neutral-400 text-sm">
+                  <td colSpan={6} className="p-8 text-center text-neutral-400 text-sm">
                     No blocks created yet.
                   </td>
                 </tr>

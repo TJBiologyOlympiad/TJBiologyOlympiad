@@ -50,6 +50,16 @@ export async function GET(request: Request) {
     return an.localeCompare(bn);
   });
 
+  if (searchParams.get("format") === "json") {
+    return NextResponse.json({
+      records: rows.map((r) => ({
+        name: r.User?.name ?? null,
+        username: r.User?.username ?? null,
+        timestamp: r.timestamp,
+      })),
+    });
+  }
+
   const header = ["Name", "Username", "Block", "Date", "Code", "Marked At"];
   const lines = [header.join(",")];
   for (const r of rows) {
