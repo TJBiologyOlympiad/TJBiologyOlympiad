@@ -1,8 +1,8 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
-import { Loader2, Download, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useState, useCallback } from "react";
+import { ChevronDown, ChevronRight, Loader2, Download, Trash2 } from "lucide-react";
 import Announcements from "@/app/components/Announcements";
 
 type AttendanceBlock = {
@@ -22,6 +22,8 @@ type ManagedBlock = {
   _count?: { records: number };
 };
 
+type AttendeeRecord = { name: string | null; username: string | null; timestamp: string };
+
 const BLOCK_TYPES = ["8A", "8B"];
 
 function fmtDate(s: string) {
@@ -31,6 +33,10 @@ function fmtDate(s: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function fmtTime(s: string) {
+  return new Date(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 export default function DashboardPage() {
@@ -48,6 +54,8 @@ export default function DashboardPage() {
     code: "",
   });
   const [blockErr, setBlockErr] = useState("");
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [attendees, setAttendees] = useState<Record<number, AttendeeRecord[] | "error">>({});
 
   const isStaff = !!user && (user.roles.includes("officer") || user.roles.includes("sponsor"));
 
@@ -142,6 +150,22 @@ export default function DashboardPage() {
     await fetch(`/api/attendance/blocks?id=${id}`, { method: "DELETE" });
     fetchManaged();
     fetchBlocks();
+  };
+
+  const toggleAttendees = async (id: number) => {
+    if (expanded === id) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(id);
+    try {
+      const res = await fetch(`/api/attendance/export?blockId=${id}&format=json`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setAttendees((prev) => ({ ...prev, [id]: data.records }));
+    } catch {
+      setAttendees((prev) => ({ ...prev, [id]: "error" }));
+    }
   };
 
   const exportCSV = (id?: number) => {
@@ -265,6 +289,7 @@ export default function DashboardPage() {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-neutral-200 text-xs text-neutral-500">
+                      <th className="py-2 pr-3 w-6" />
                       <th className="py-2 pr-3">Block</th>
                       <th className="py-2 pr-3">Date</th>
                       <th className="py-2 pr-3">Code</th>
@@ -274,38 +299,81 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {managed.map((b) => (
-                      <tr key={b.id} className="border-b border-neutral-100">
-                        <td className="py-2 pr-3">{b.blockType}</td>
-                        <td className="py-2 pr-3 text-neutral-500">{fmtDate(b.date)}</td>
-                        <td className="py-2 pr-3 font-mono text-neutral-600">{b.code}</td>
-                        <td className="py-2 pr-3">{b._count?.records ?? 0}</td>
-                        <td className="py-2 pr-3">
-                          <div className="flex gap-2">
+                      <Fragment key={b.id}>
+                        <tr className="border-b border-neutral-100">
+                          <td className="py-2 pr-3">
                             <button
-                              onClick={() => closeBlock(b.id, b.isClosed)}
-                              className="text-xs border border-neutral-300 px-2 py-0.5 hover:border-sage"
+                              onClick={() => toggleAttendees(b.id)}
+                              aria-label={expanded === b.id ? "Hide attendees" : "Show attendees"}
+                              className="text-neutral-500 hover:text-neutral-900 align-middle"
                             >
-                              {b.isClosed ? "Reopen" : "Close"}
+                              {expanded === b.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
-                            <button
-                              onClick={() => exportCSV(b.id)}
-                              className="text-xs border border-neutral-300 px-2 py-0.5 hover:border-sage flex items-center gap-1"
-                            >
-                              <Download className="w-3 h-3" /> CSV
-                            </button>
-                            <button
-                              onClick={() => deleteBlock(b.id)}
-                              className="text-xs border border-neutral-300 px-2 py-0.5 text-red-500 hover:border-red-400 flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3 h-3" /> Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="py-2 pr-3">{b.blockType}</td>
+                          <td className="py-2 pr-3 text-neutral-500">{fmtDate(b.date)}</td>
+                          <td className="py-2 pr-3 font-mono text-neutral-600">{b.code}</td>
+                          <td className="py-2 pr-3">{b._count?.records ?? 0}</td>
+                          <td className="py-2 pr-3">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => closeBlock(b.id, b.isClosed)}
+                                className="text-xs border border-neutral-300 px-2 py-0.5 hover:border-sage"
+                              >
+                                {b.isClosed ? "Reopen" : "Close"}
+                              </button>
+                              <button
+                                onClick={() => exportCSV(b.id)}
+                                className="text-xs border border-neutral-300 px-2 py-0.5 hover:border-sage flex items-center gap-1"
+                              >
+                                <Download className="w-3 h-3" /> CSV
+                              </button>
+                              <button
+                                onClick={() => deleteBlock(b.id)}
+                                className="text-xs border border-neutral-300 px-2 py-0.5 text-red-500 hover:border-red-400 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expanded === b.id && (
+                          <tr className="border-b border-neutral-100 bg-neutral-50">
+                            <td colSpan={6} className="p-3">
+                              {attendees[b.id] === undefined ? (
+                                <p className="text-neutral-400">Loading…</p>
+                              ) : attendees[b.id] === "error" ? (
+                                <p className="text-red-500">Failed to load attendees.</p>
+                              ) : (attendees[b.id] as AttendeeRecord[]).length === 0 ? (
+                                <p className="text-neutral-400">No one has marked attendance yet.</p>
+                              ) : (
+                                <table className="w-full text-left">
+                                  <thead>
+                                    <tr className="text-xs text-neutral-500">
+                                      <th className="py-1 pr-3 font-medium">Name</th>
+                                      <th className="py-1 pr-3 font-medium">Username</th>
+                                      <th className="py-1 font-medium">Marked At</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(attendees[b.id] as AttendeeRecord[]).map((r, i) => (
+                                      <tr key={i} className="border-t border-neutral-200">
+                                        <td className="py-1 pr-3 text-neutral-900">{r.name || "—"}</td>
+                                        <td className="py-1 pr-3 font-mono text-neutral-600">{r.username || "—"}</td>
+                                        <td className="py-1 text-neutral-500">{fmtTime(r.timestamp)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                     {managed.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-neutral-400">
+                        <td colSpan={6} className="py-6 text-center text-neutral-400">
                           No blocks yet.
                         </td>
                       </tr>
